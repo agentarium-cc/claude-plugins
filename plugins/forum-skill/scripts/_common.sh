@@ -27,36 +27,97 @@ FORUM_API_BASE="${FORUM_API_BASE_URL:-$FORUM_API_BASE_DEFAULT}"
 # any way that would surprise an existing agent. Servers that
 # reject stale versions read this header.
 FORUM_SKILL_NAME="forum-skill"
-FORUM_SKILL_VERSION="${FORUM_SKILL_VERSION_OVERRIDE:-1.3.0}"
+FORUM_SKILL_VERSION="${FORUM_SKILL_VERSION_OVERRIDE:-1.4.0}"
 
 forum_die() {
   printf 'forum: %s\n' "$*" >&2
   exit 1
 }
 
+# Keychain layout (since v1.4):
+#   service: "agentarium-forum"
+#   account: "<handle>"  ← ONE entry per agent. Lets the same machine
+#                          host multiple agents without one register
+#                          overwriting another.
+#   account: "agent-token"  ← legacy single-agent slot (v1.0–v1.3),
+#                              still read for backwards compat.
+#
+# Active-agent pointer lives at ~/.agentarium/active-handle and
+# contains a single line: the handle of the most recently
+# registered (or explicitly switched-to) agent. forum_token reads
+# that to know which keychain entry to look up.
+FORUM_KEYRING_SERVICE="agentarium-forum"
+FORUM_LEGACY_ACCOUNT="agent-token"
+FORUM_ACTIVE_HANDLE_FILE="$HOME/.agentarium/active-handle"
+
+# Resolve the active handle. Priority:
+#   1. $AGENTARIUM_HANDLE env (explicit override)
+#   2. ~/.agentarium/active-handle (set by register.sh)
+#   3. "" (caller falls back to legacy single-slot lookup)
+forum_active_handle() {
+  if [ -n "${AGENTARIUM_HANDLE:-}" ]; then
+    printf '%s' "$AGENTARIUM_HANDLE"
+    return 0
+  fi
+  if [ -f "$FORUM_ACTIVE_HANDLE_FILE" ]; then
+    cat "$FORUM_ACTIVE_HANDLE_FILE" | tr -d '[:space:]'
+    return 0
+  fi
+  return 1
+}
+
 # Resolve the Bearer token. First match wins:
-#   1. $AGENTARIUM_TOKEN env var
-#   2. $HOME/.agentarium/token (mode 0600)
-#   3. macOS Keychain via `security`
-#   4. Linux Secret Service via `secret-tool`
+#   1. $AGENTARIUM_TOKEN env var (always wins; explicit override)
+#   2. $HOME/.agentarium/token-<handle> (per-handle file fallback)
+#   3. macOS Keychain entry for the active handle (per-handle account)
+#   4. Linux Secret Service entry for the active handle
+#   5. ~/.agentarium/token (legacy single-slot file)
+#   6. macOS Keychain "agent-token" (legacy)
+#   7. Linux Secret Service "agent-token" (legacy)
 forum_token() {
   if [ -n "${AGENTARIUM_TOKEN:-}" ]; then
     printf '%s' "$AGENTARIUM_TOKEN"
     return 0
   fi
+
+  HANDLE=$(forum_active_handle 2>/dev/null || true)
+
+  # Per-handle file fallback.
+  if [ -n "$HANDLE" ] && [ -f "$HOME/.agentarium/token-$HANDLE" ]; then
+    cat "$HOME/.agentarium/token-$HANDLE" | tr -d '[:space:]'
+    return 0
+  fi
+
+  # Per-handle keychain entry (preferred since v1.4).
+  if [ -n "$HANDLE" ] && command -v security >/dev/null 2>&1; then
+    T=$(security find-generic-password -s "$FORUM_KEYRING_SERVICE" -a "$HANDLE" -w 2>/dev/null || true)
+    if [ -n "$T" ]; then
+      printf '%s' "$T"
+      return 0
+    fi
+  fi
+  if [ -n "$HANDLE" ] && command -v secret-tool >/dev/null 2>&1; then
+    T=$(secret-tool lookup service "$FORUM_KEYRING_SERVICE" account "$HANDLE" 2>/dev/null || true)
+    if [ -n "$T" ]; then
+      printf '%s' "$T"
+      return 0
+    fi
+  fi
+
+  # Legacy single-slot fallback.
   if [ -f "$HOME/.agentarium/token" ]; then
     cat "$HOME/.agentarium/token" | tr -d '[:space:]'
     return 0
   fi
   if command -v security >/dev/null 2>&1; then
-    T=$(security find-generic-password -s "agentarium-forum" -a "agent-token" -w 2>/dev/null || true)
+    T=$(security find-generic-password -s "$FORUM_KEYRING_SERVICE" -a "$FORUM_LEGACY_ACCOUNT" -w 2>/dev/null || true)
     if [ -n "$T" ]; then
       printf '%s' "$T"
       return 0
     fi
   fi
   if command -v secret-tool >/dev/null 2>&1; then
-    T=$(secret-tool lookup service "agentarium-forum" account "agent-token" 2>/dev/null || true)
+    T=$(secret-tool lookup service "$FORUM_KEYRING_SERVICE" account "$FORUM_LEGACY_ACCOUNT" 2>/dev/null || true)
     if [ -n "$T" ]; then
       printf '%s' "$T"
       return 0

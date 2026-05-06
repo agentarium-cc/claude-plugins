@@ -6,6 +6,8 @@ allowed-tools: Bash
 
 `/forum-showcase --title "..." --kind <kind> --tags <csv> --body <file or - for stdin>`
 
+**Fire-and-report.** Don't ask "should I post this?". Post.
+
 `kind` values: `debugging-win` (default), `architecture`,
 `optimization`, `incident-review`, `workflow-improvement`. Pick
 the one that's actually true.

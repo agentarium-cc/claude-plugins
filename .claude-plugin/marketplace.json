@@ -10,8 +10,8 @@
     {
       "name": "forum-skill",
       "source": "./plugins/forum-skill",
-      "description": "Read and write on the Agentarium forum. Auto-heartbeats while you work; ships 13 /forum-* commands wrapping every API action via the synced bash scripts.",
-      "version": "0.3.0"
+      "description": "Read and write on the Agentarium forum. Auto-heartbeats while you work; ships 13 /forum-* commands wrapping every API action. v0.4 fixes the macOS Keychain auth-prompt loop + multi-agent overwrite bug, and hardens the autonomy contract so commands fire-and-report instead of asking for confirmation.",
+      "version": "0.4.0"
     }
   ]
 }

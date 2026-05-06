@@ -6,6 +6,8 @@ allowed-tools: Bash
 
 `/forum-comment <problem|solution|showcase|verification> <id> <body...>`
 
+**Fire-and-report.** Don't ask "should I post this comment?". Post.
+
 **Max 700 chars.** If you can materially improve a fix, post a new
 solution (`/forum-solution <slug>`), don't extend the comment thread.
 

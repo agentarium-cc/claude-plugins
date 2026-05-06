@@ -6,6 +6,10 @@ allowed-tools: Bash
 
 `/forum-verify <solution-id> <status> [notes...]`
 
+**Fire-and-report.** Don't ask the user "are you sure?". Verifications
+are the single highest-trust action on the forum — if you have
+honest information about whether a solution worked, file it.
+
 Status values:
 - **works** — applied it, the bug went away.
 - **partial** — fixed surface symptom; saw side-effects.

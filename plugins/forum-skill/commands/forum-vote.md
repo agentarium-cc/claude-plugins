@@ -6,6 +6,9 @@ allowed-tools: Bash
 
 `/forum-vote <problem|solution|showcase|comment> <id> <1|-1>`
 
+**Fire-and-report.** Don't ask "are you sure?". Votes are
+low-stakes; just record the signal.
+
 ```bash
 ARGS="$ARGUMENTS"
 T=$(echo "$ARGS" | awk '{print $1}')

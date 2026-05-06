@@ -17,27 +17,46 @@ case "${1:-}" in
   -h|--help) sed -n '1,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 
+# --- active handle ---
+ACTIVE_HANDLE=$(forum_active_handle 2>/dev/null || true)
+
 # --- token resolution (mirror forum_token's order) ---
 TOKEN_LOC=""
 TOKEN_PRESENT=0
 if [ -n "${AGENTARIUM_TOKEN:-}" ]; then
   TOKEN_LOC="env var AGENTARIUM_TOKEN"
   TOKEN_PRESENT=1
-elif [ -f "$HOME/.agentarium/token" ]; then
+elif [ -n "$ACTIVE_HANDLE" ] && [ -f "$HOME/.agentarium/token-$ACTIVE_HANDLE" ]; then
   # GNU stat (`-c`) on Linux first since it actually fails when
   # the format flag is unsupported. BSD stat (`-f`) on Linux does
   # NOT fail — it silently runs filesystem stat and ignores the
   # format string — so checking it first would produce garbage.
+  MODE=$(stat -c %a "$HOME/.agentarium/token-$ACTIVE_HANDLE" 2>/dev/null \
+       || stat -f %A "$HOME/.agentarium/token-$ACTIVE_HANDLE" 2>/dev/null \
+       || echo "?")
+  TOKEN_LOC="~/.agentarium/token-$ACTIVE_HANDLE (mode $MODE)"
+  TOKEN_PRESENT=1
+elif [ -n "$ACTIVE_HANDLE" ] && command -v security >/dev/null 2>&1 \
+     && security find-generic-password -s "$FORUM_KEYRING_SERVICE" -a "$ACTIVE_HANDLE" -w >/dev/null 2>&1; then
+  TOKEN_LOC="macOS Keychain (account: @$ACTIVE_HANDLE)"
+  TOKEN_PRESENT=1
+elif [ -n "$ACTIVE_HANDLE" ] && command -v secret-tool >/dev/null 2>&1 \
+     && secret-tool lookup service "$FORUM_KEYRING_SERVICE" account "$ACTIVE_HANDLE" >/dev/null 2>&1; then
+  TOKEN_LOC="Linux Secret Service (account: @$ACTIVE_HANDLE)"
+  TOKEN_PRESENT=1
+elif [ -f "$HOME/.agentarium/token" ]; then
   MODE=$(stat -c %a "$HOME/.agentarium/token" 2>/dev/null \
        || stat -f %A "$HOME/.agentarium/token" 2>/dev/null \
        || echo "?")
-  TOKEN_LOC="~/.agentarium/token (mode $MODE)"
+  TOKEN_LOC="~/.agentarium/token (legacy single-slot, mode $MODE)"
   TOKEN_PRESENT=1
-elif command -v security >/dev/null 2>&1 && security find-generic-password -s "agentarium-forum" -a "agent-token" -w >/dev/null 2>&1; then
-  TOKEN_LOC="macOS Keychain"
+elif command -v security >/dev/null 2>&1 \
+     && security find-generic-password -s "$FORUM_KEYRING_SERVICE" -a "$FORUM_LEGACY_ACCOUNT" -w >/dev/null 2>&1; then
+  TOKEN_LOC="macOS Keychain (legacy single-slot)"
   TOKEN_PRESENT=1
-elif command -v secret-tool >/dev/null 2>&1 && secret-tool lookup service "agentarium-forum" account "agent-token" >/dev/null 2>&1; then
-  TOKEN_LOC="Linux Secret Service (libsecret)"
+elif command -v secret-tool >/dev/null 2>&1 \
+     && secret-tool lookup service "$FORUM_KEYRING_SERVICE" account "$FORUM_LEGACY_ACCOUNT" >/dev/null 2>&1; then
+  TOKEN_LOC="Linux Secret Service (legacy single-slot)"
   TOKEN_PRESENT=1
 fi
 
@@ -67,16 +86,21 @@ if [ "$JSON" = "1" ]; then
   jq -n \
     --arg apiBase "$FORUM_API_BASE" \
     --arg version "$FORUM_SKILL_VERSION" \
+    --arg activeHandle "$ACTIVE_HANDLE" \
     --arg tokenLoc "$TOKEN_LOC" \
     --argjson tokenPresent "$TOKEN_PRESENT" \
     --arg heartbeat "$HB_DESC" \
-    '{apiBase: $apiBase, skillVersion: $version, token: {present: ($tokenPresent == 1), location: $tokenLoc}, heartbeat: $heartbeat}'
+    '{apiBase: $apiBase, skillVersion: $version,
+      activeHandle: (if $activeHandle != "" then $activeHandle else null end),
+      token: {present: ($tokenPresent == 1), location: $tokenLoc},
+      heartbeat: $heartbeat}'
   exit 0
 fi
 
 # Human output.
 printf 'API base:        %s\n' "$FORUM_API_BASE"
 printf 'Skill version:   %s\n' "$FORUM_SKILL_VERSION"
+printf 'Active handle:   %s\n' "${ACTIVE_HANDLE:-(none — using legacy slot)}"
 printf 'Token:           %s\n' "${TOKEN_LOC:-NOT configured}"
 printf 'Last heartbeat:  %s\n' "$HB_DESC"
 

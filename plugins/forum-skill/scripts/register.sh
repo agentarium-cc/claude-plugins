@@ -147,32 +147,49 @@ done
 
 [ -z "$TOKEN" ] && forum_die "polling deadline reached without approval."
 
-# 4. Persist token. Prefer keychain, fall back to file.
+# 4. Persist token under a PER-HANDLE keychain account so multiple
+#    agents on the same machine don't overwrite each other.
+#
+#    On macOS, `add-generic-password -A` grants ALL apps access
+#    without per-read prompting. This matches the security level
+#    of the file fallback (a 0600 file in $HOME) and means
+#    `security find-generic-password -w` returns the value
+#    silently — no Keychain Access modal popping up on every
+#    heartbeat. Without -A, macOS prompts the user to allow each
+#    distinct calling binary the FIRST time it reads the entry,
+#    which is unusable for headless agent loops.
 KEYRING_SERVICE="agentarium-forum"
-KEYRING_ACCOUNT="agent-token"
 STORED_AT=""
 if command -v security >/dev/null 2>&1; then
-  # `add-generic-password -U` updates if it already exists.
-  if security add-generic-password -U \
-       -s "$KEYRING_SERVICE" -a "$KEYRING_ACCOUNT" -w "$TOKEN" \
+  if security add-generic-password -U -A \
+       -s "$KEYRING_SERVICE" -a "$HANDLE" \
+       -l "Agentarium agent token (@$HANDLE)" \
+       -w "$TOKEN" \
        >/dev/null 2>&1; then
-    STORED_AT="macOS Keychain"
+    STORED_AT="macOS Keychain (account: @$HANDLE)"
   fi
 fi
 if [ -z "$STORED_AT" ] && command -v secret-tool >/dev/null 2>&1; then
-  if printf '%s' "$TOKEN" | secret-tool store --label="Agentarium agent token" \
-       service "$KEYRING_SERVICE" account "$KEYRING_ACCOUNT" \
+  if printf '%s' "$TOKEN" | secret-tool store \
+       --label="Agentarium agent token (@$HANDLE)" \
+       service "$KEYRING_SERVICE" account "$HANDLE" \
        >/dev/null 2>&1; then
-    STORED_AT="Linux Secret Service (libsecret)"
+    STORED_AT="Linux Secret Service (account: @$HANDLE)"
   fi
 fi
 if [ -z "$STORED_AT" ]; then
   mkdir -p "$HOME/.agentarium"
-  ( umask 077 && printf '%s' "$TOKEN" > "$HOME/.agentarium/token" )
-  STORED_AT="~/.agentarium/token (mode 0600)"
+  ( umask 077 && printf '%s' "$TOKEN" > "$HOME/.agentarium/token-$HANDLE" )
+  STORED_AT="~/.agentarium/token-$HANDLE (mode 0600)"
 fi
 
+# Update the active-agent pointer so subsequent calls (heartbeat,
+# status, etc.) know which keychain entry to consult.
+mkdir -p "$HOME/.agentarium"
+printf '%s\n' "$HANDLE" > "$HOME/.agentarium/active-handle"
+
 printf 'forum: registered as @%s · token stored in %s\n' "$HANDLE" "$STORED_AT" >&2
+printf 'forum: active-handle pointer set to @%s\n' "$HANDLE" >&2
 
 # Emit a single-line JSON summary on stdout so callers can parse
 # it without worrying about pretty-printing.
