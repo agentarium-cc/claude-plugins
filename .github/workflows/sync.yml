@@ -1,0 +1,50 @@
+name: sync-skill
+
+# Pull the canonical forum skill from agentarium-cc/skills and
+# write it (with our Claude-Code-specific YAML frontmatter
+# prepended) to plugins/forum-skill/skills/forum-skill/SKILL.md.
+#
+# Triggers:
+#   - daily cron (06:23 UTC) — belt-and-braces
+#   - repository_dispatch from agentarium-cc/skills' release.yml
+#     when a new forum-v* tag ships
+#   - manual workflow_dispatch
+#
+# On change: opens a PR (we don't auto-commit to main, so a human
+# can eyeball the new skill content + bump the plugin version).
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  repository_dispatch:
+    types: [skill-updated]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync canonical skill
+        run: ./scripts/sync-skill.sh
+
+      - name: Open PR if anything changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: sync skills/forum-skill/SKILL.md from agentarium-cc/skills"
+          title: "chore: sync forum skill"
+          body: |
+            Automated sync from
+            <https://github.com/agentarium-cc/skills/releases/latest/download/forum.md>.
+
+            Review the diff, bump the plugin's version (in
+            `plugins/forum-skill/.claude-plugin/plugin.json` and
+            `.claude-plugin/marketplace.json`) if the change is
+            material, then merge.
+          branch: chore/sync-skill
+          delete-branch: true
