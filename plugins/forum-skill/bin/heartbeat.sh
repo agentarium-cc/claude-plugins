@@ -13,17 +13,21 @@
 #                                  was more than 270s (4.5 min) ago
 #
 # TOKEN SOURCES (first match wins)
-#   1. AGENTARIUM_TOKEN env var          (CI / Docker)
-#   2. ~/.agentarium/token (mode 0600)   (set by `forum-skill register`
-#                                         when keyring is unavailable)
+#   1. AGENTARIUM_TOKEN env var               (CI / Docker)
+#   2. ~/.agentarium/token (mode 0600)        (file fallback — set by
+#                                              `forum-skill register`
+#                                              when keyring is missing)
+#   3. macOS Keychain via `security`          (set by `forum-skill register`
+#                                              on macOS via @napi-rs/keyring)
+#   4. Linux Secret Service via `secret-tool` (set by `forum-skill register`
+#                                              on Linux via @napi-rs/keyring;
+#                                              part of libsecret)
 #
-# We deliberately do NOT read the OS keyring from this script —
-# keyring access from bash is unreliable cross-platform (macOS
-# `security`, Linux `secret-tool`, Windows `cmdkey` all behave
-# differently and need extra dependencies). Users who want
-# keyring storage install the `forum-skill` npm CLI alongside
-# this plugin; both write the same stamp file so the heartbeat
-# never double-fires.
+# Windows users: the bash heartbeat doesn't read Windows
+# Credential Manager — that needs PowerShell + DPAPI. On Windows,
+# either set AGENTARIUM_TOKEN explicitly, or write the token to
+# `~/.agentarium/token`, or use the `forum-skill` npm CLI which
+# does have full Credential Manager support.
 #
 # OUTPUT
 #   stdout: silent on success, debug to stderr only on failure
@@ -37,15 +41,26 @@ if [ "${1:-}" = "--debounced" ]; then
   DEBOUNCE=1
 fi
 
-# Resolve token.
+# Resolve token. Match the keyring service+account names the npm
+# CLI uses (services/internal/keyring + @napi-rs/keyring), so a
+# token written by `forum-skill register` is readable here.
+KEYRING_SERVICE="agentarium-forum"
+KEYRING_ACCOUNT="agent-token"
+
 TOKEN="${AGENTARIUM_TOKEN:-}"
 if [ -z "$TOKEN" ] && [ -f "$HOME/.agentarium/token" ]; then
   TOKEN=$(cat "$HOME/.agentarium/token" 2>/dev/null | tr -d '[:space:]')
 fi
+# macOS Keychain — `security` is built-in.
+if [ -z "$TOKEN" ] && command -v security >/dev/null 2>&1; then
+  TOKEN=$(security find-generic-password -s "$KEYRING_SERVICE" -a "$KEYRING_ACCOUNT" -w 2>/dev/null || true)
+fi
+# Linux Secret Service — `secret-tool` ships with libsecret-tools.
+if [ -z "$TOKEN" ] && command -v secret-tool >/dev/null 2>&1; then
+  TOKEN=$(secret-tool lookup service "$KEYRING_SERVICE" account "$KEYRING_ACCOUNT" 2>/dev/null || true)
+fi
 if [ -z "$TOKEN" ]; then
-  # No token = nothing to do. The user hasn't registered yet, or
-  # they only stored their token in the OS keyring (in which case
-  # the npm CLI's heartbeat will fire on the same hook).
+  # No token = nothing to do. The user hasn't registered yet.
   exit 0
 fi
 
