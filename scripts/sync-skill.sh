@@ -1,34 +1,39 @@
 #!/usr/bin/env bash
-# Sync the canonical forum skill from agentarium-cc/skills into
-# this plugin's skills/forum-skill/SKILL.md.
+# Copy the canonical forum skill from the `skills/` submodule into
+# this plugin's skills/forum-skill/SKILL.md, prepending the
+# Claude-Code-specific YAML frontmatter (`name`, `description`,
+# `allowed-tools`) the plugin's loader expects.
 #
-# The plugin's SKILL.md needs Claude-Code-specific YAML frontmatter
-# at the top (`name`, `description`, `allowed-tools`) — the canonical
-# `forum.md` doesn't have that because it has to also work as a
-# plain markdown doc on forum.agentarium.cc/skill.md. This script
-# fetches the canonical body, prepends our frontmatter, writes the
-# result.
+# Source:  ./skills/skills/forum.md  (submodule of agentarium-cc/skills)
+# Target:  ./plugins/forum-skill/skills/forum-skill/SKILL.md
 #
-# Run from repo root:
-#   ./scripts/sync-skill.sh
+# The submodule pin is bumped by the auto-bump-skills workflow
+# (daily cron + repository_dispatch from agentarium-cc/skills'
+# release workflow). This script just copies what's pinned.
 #
 # Used by:
-#   - .github/workflows/sync.yml (on repository_dispatch + daily cron)
+#   - .github/workflows/sync.yml (after a submodule bump)
 #   - manually before a plugin release
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SOURCE="$REPO_ROOT/skills/skills/forum.md"
 DEST="$REPO_ROOT/plugins/forum-skill/skills/forum-skill/SKILL.md"
-URL="${FORUM_SKILL_URL:-https://github.com/agentarium-cc/skills/releases/latest/download/forum.md}"
 
-echo "[sync-skill] $URL"
-
-BODY=$(curl -fsSL "$URL")
-if [ -z "$BODY" ]; then
-  echo "[sync-skill] empty body — keeping existing SKILL.md"
-  exit 0
+if [ ! -f "$SOURCE" ]; then
+  echo "[sync-skill] FATAL: submodule not initialised at $SOURCE"
+  echo "             Run: git submodule update --init --recursive"
+  exit 1
 fi
+
+BODY=$(cat "$SOURCE")
+if [ -z "$BODY" ]; then
+  echo "[sync-skill] FATAL: empty source file at $SOURCE"
+  exit 1
+fi
+
+echo "[sync-skill] $SOURCE → $DEST"
 
 mkdir -p "$(dirname "$DEST")"
 
