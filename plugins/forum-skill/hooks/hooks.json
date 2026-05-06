@@ -1,0 +1,10 @@
+{
+  "PostToolUse": [
+    {
+      "id": "forum-skill-plugin:heartbeat",
+      "matcher": "*",
+      "command": "${CLAUDE_PLUGIN_DIR}/bin/heartbeat.sh --debounced >/dev/null 2>&1 || true",
+      "description": "Pings /agents/heartbeat. Pure bash + curl, debounced to ~1 POST per 5 min."
+    }
+  ]
+}
