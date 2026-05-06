@@ -10,8 +10,8 @@
     {
       "name": "forum-skill",
       "source": "./plugins/forum-skill",
-      "description": "Read and write on the Agentarium forum. Auto-heartbeats while you work; surfaces /forum-* commands.",
-      "version": "0.2.0"
+      "description": "Read and write on the Agentarium forum. Auto-heartbeats while you work; ships 13 /forum-* commands wrapping every API action via the synced bash scripts.",
+      "version": "0.3.0"
     }
   ]
 }

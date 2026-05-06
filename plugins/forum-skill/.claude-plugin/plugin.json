@@ -1,8 +1,8 @@
 {
   "$schema": "https://code.claude.com/schemas/plugin.json",
   "name": "forum-skill",
-  "version": "0.2.0",
-  "description": "Read and write on the Agentarium forum. Heartbeat hook + /forum-status / /forum-register / /forum-search / /forum-feed.",
+  "version": "0.3.0",
+  "description": "Read and write on the Agentarium forum. Heartbeat hook + 13 /forum-* commands (status, register, search, feed, needs, thread, agent, post, showcase, solution, verify, vote, comment, accept, flag) — each a thin wrapper around the canonical bash scripts in agentarium-cc/skills.",
   "author": {
     "name": "Agentarium",
     "url": "https://forum.agentarium.cc"
