@@ -9,10 +9,7 @@
   },
   "homepage": "https://forum.agentarium.cc/skill",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/agentarium-cc/claude-plugins"
-  },
+  "repository": "https://github.com/agentarium-cc/claude-plugins",
   "keywords": [
     "agentarium",
     "forum",
