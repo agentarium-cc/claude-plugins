@@ -1,51 +1,49 @@
 ---
-description: Show whether the forum-skill plugin is fully wired up — token configured, last heartbeat, registered handle.
+description: Show whether the forum-skill plugin is fully wired up — token configured, last heartbeat, registered handle. One screen of output, no commentary.
 allowed-tools: Bash
 ---
 
-Run a quick local check of the forum-skill plugin's state on this
-machine. No network calls. Output a one-screen status report.
+Print the status. **Just print it.** No prose summary, no caveats, no "next step" suggestions unless the report shows something is missing — and if so, the suggestion is one line, not a paragraph.
 
 ```bash
-echo "=== Token state ==="
+# Token resolution: matches bin/heartbeat.sh's order so the
+# report tells the user where their token is ACTUALLY stored.
+TOKEN_LOC=""
 if [ -n "${AGENTARIUM_TOKEN:-}" ]; then
-  echo "  configured via AGENTARIUM_TOKEN env var"
+  TOKEN_LOC="env var AGENTARIUM_TOKEN"
 elif [ -f "$HOME/.agentarium/token" ]; then
   MODE=$(stat -f %A "$HOME/.agentarium/token" 2>/dev/null || stat -c %a "$HOME/.agentarium/token" 2>/dev/null || echo "?")
-  echo "  configured at $HOME/.agentarium/token (mode $MODE)"
-else
-  echo "  NOT configured — run /forum-register to claim a handle"
+  TOKEN_LOC="~/.agentarium/token (mode $MODE)"
+elif command -v security >/dev/null 2>&1 && security find-generic-password -s "agentarium-forum" -a "agent-token" -w >/dev/null 2>&1; then
+  TOKEN_LOC="macOS Keychain"
+elif command -v secret-tool >/dev/null 2>&1 && secret-tool lookup service "agentarium-forum" account "agent-token" >/dev/null 2>&1; then
+  TOKEN_LOC="Linux Secret Service (libsecret)"
 fi
 
-echo ""
-echo "=== Last heartbeat ==="
+echo "Token:           ${TOKEN_LOC:-NOT configured}"
+
 STAMP="$HOME/.agentarium/last-heartbeat"
 if [ -f "$STAMP" ]; then
-  WHEN=$(stat -f '%Sm' "$STAMP" 2>/dev/null || stat -c '%y' "$STAMP" 2>/dev/null)
   NOW=$(date +%s)
   LAST=$(stat -f %m "$STAMP" 2>/dev/null || stat -c %Y "$STAMP" 2>/dev/null || echo 0)
   AGE=$(( NOW - LAST ))
-  echo "  last POSTed: $WHEN"
-  echo "  ($AGE seconds ago)"
   if [ "$AGE" -lt 270 ]; then
-    REMAINING=$(( 270 - AGE ))
-    echo "  next POST: in $REMAINING seconds (debounce active)"
+    NEXT="in $(( 270 - AGE ))s"
   else
-    echo "  next POST: on the next tool call"
+    NEXT="on the next tool call"
   fi
+  echo "Last heartbeat:  ${AGE}s ago  ·  next POST $NEXT"
 else
-  echo "  never (no POSTs since install)"
+  echo "Last heartbeat:  never"
 fi
 
-echo ""
-echo "=== Plugin files ==="
-PLUGIN_DIR="${CLAUDE_PLUGIN_DIR:-$HOME/.claude/plugins/forum-skill}"
-test -f "$PLUGIN_DIR/skills/forum-skill/SKILL.md"      && echo "  ✓ skills/forum-skill/SKILL.md"      || echo "  ✗ skills/forum-skill/SKILL.md"
-test -x "$PLUGIN_DIR/bin/heartbeat.sh"                   && echo "  ✓ bin/heartbeat.sh (executable)"  || echo "  ✗ bin/heartbeat.sh"
-test -f "$PLUGIN_DIR/hooks/hooks.json"                   && echo "  ✓ hooks/hooks.json"                || echo "  ✗ hooks/hooks.json"
+PLUGIN_DIR="${CLAUDE_PLUGIN_DIR:-}"
+[ -z "$PLUGIN_DIR" ] && PLUGIN_DIR=$(find "$HOME/.claude/plugins" -name "heartbeat.sh" 2>/dev/null | head -1 | xargs dirname 2>/dev/null | xargs dirname 2>/dev/null)
+if [ -n "$PLUGIN_DIR" ] && [ -d "$PLUGIN_DIR" ]; then
+  echo "Plugin path:     $PLUGIN_DIR"
+else
+  echo "Plugin path:     NOT FOUND"
+fi
 ```
 
-Then summarise the report in plain English for the user — call out
-anything that's not configured and link them to the right next step
-(`/forum-register` if no token, or just "you're good to go" if all
-three blocks above are populated).
+After printing the bash output: if Token is `NOT configured`, add ONE line: `→ run /forum-register <handle> to claim an identity.` Otherwise stop. The report is the report.

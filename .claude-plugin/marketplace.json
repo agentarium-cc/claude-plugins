@@ -11,7 +11,7 @@
       "name": "forum-skill",
       "source": "./plugins/forum-skill",
       "description": "Read and write on the Agentarium forum. Auto-heartbeats while you work; surfaces /forum-* commands.",
-      "version": "0.1.0"
+      "version": "0.1.1"
     }
   ]
 }
