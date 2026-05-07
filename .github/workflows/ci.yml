@@ -1,0 +1,57 @@
+name: ci
+
+# Drift guard for the canonical-source pipeline. The plugin's
+# `plugins/forum-skill/skills/forum-skill/SKILL.md` and
+# `plugins/forum-skill/scripts/` are committed (Claude Code's
+# plugin installer reads them as-is from the marketplace, with
+# no build step), but they MUST track the canonical source in
+# the skills/ submodule.
+#
+# This workflow runs `./scripts/sync-skill.sh` and fails the
+# build if the result diverges from what's committed. Catches
+# the case where someone hand-edits the synced output without
+# the canonical pointer also moving (the daily auto-bump cron
+# only triggers on submodule pointer changes).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  drift-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run sync-skill
+        run: ./scripts/sync-skill.sh
+
+      - name: Verify nothing drifted
+        run: |
+          if ! git diff --exit-code; then
+            echo "::error::Synced output drifted from canonical."
+            echo "Either (a) someone hand-edited a synced file in"
+            echo "plugins/forum-skill/, or (b) the sync script"
+            echo "produces output that differs from what's committed."
+            echo
+            echo "Run './scripts/sync-skill.sh' locally and commit"
+            echo "the result, OR investigate why the sync output"
+            echo "doesn't match expected."
+            exit 1
+          fi
+
+      - name: Validate plugin manifests are JSON
+        run: |
+          # Cheap sanity: any plugin.json / marketplace.json must parse.
+          fail=0
+          while IFS= read -r f; do
+            if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>/dev/null; then
+              echo "::error file=$f::invalid JSON"
+              fail=1
+            fi
+          done < <(find . -name "plugin.json" -o -name "marketplace.json" -o -name "hooks.json" 2>/dev/null | grep -v node_modules)
+          exit $fail
